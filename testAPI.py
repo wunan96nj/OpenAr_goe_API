@@ -1,7 +1,5 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-
-from msilib import sequence
 from unicodedata import mirrored
 import numpy as np
 from numpy.linalg import inv
@@ -261,17 +259,19 @@ def GetGeoPosReq():
     bank = 0
     mappingapi_url = "http://localhost:5444/capture-photo"
     token = "192b47014ee982495df0a08674ac49a11eca4cb4427e3115a0254b89d07587cc"
-    (ret_image_name, ret_qvec, ret_tvec) = QueryLocal(
+    (ret_image_name, ret_qvec, ret_tvec, lat_ref, lon_ref, h_ref) = QueryLocal(
         mappingapi_url, token, uploadimageb64, sequence_number, bank, username, password)
     
-    print("Print out localization results")
-    print(ret_image_name, ret_qvec, ret_tvec)
+    print("Print out localization results (name, q, t, GPS)")
+    print(ret_image_name, ret_qvec, ret_tvec, lat_ref, lon_ref, h_ref)
+
+
     #ret = {"ret_image_name": ret_image_name, "ret_qvec": ret_qvec, "ret_tvec": ret_tvec}
 
     enu_pos, orient = qt_to_posR(ret_tvec, ret_qvec)
 
 
-    wgs84_pos = enu_to_geodetic(enu_pos[0], enu_pos[1], enu_pos[2], 0, 0, 1)
+    wgs84_pos = enu_to_geodetic(enu_pos[0], enu_pos[1], enu_pos[2], lat_ref, lon_ref, h_ref)
     ret = {
         "id": geo_id, 
         "timestamp": timestamp, 
@@ -294,6 +294,7 @@ def GetGeoPosReq():
     }
 
     return jsonify(json.dumps(ret))
+
 
 def write_to_file(content_s, file_full_path, is_base64):
     if is_base64:
@@ -321,8 +322,34 @@ def QueryLocal(url, token, uploadimageb64, sequence_number, bank, username, pass
     ret_image_name = return_obj[0]
     ret_qvec = return_obj[1]
     ret_tvec = return_obj[2]
-    return (ret_image_name, ret_qvec, ret_tvec)
-            
+    lat_ref, lon_ref, h_ref = return_obj[3], return_obj[4], return_obj[5]
+    return (ret_image_name, ret_qvec, ret_tvec, lat_ref, lon_ref, h_ref)
+
+
+
+@app.route('/capture-photo/goepose_gt', methods=['GET', 'POST'])
+def imageBinInfo():
+    url, token, bank, username, password = "http://localhost:5444/capture-photo", "192b47014ee982495df0a08674ac49a11eca4cb4427e3115a0254b89d07587cc", 0, 'sample_user', 'pass'
+    json_data = request.get_json(force=True)
+    image_name = json_data["image_name"]
+
+    # image_name = image_name.split('.')[0]
+    print("ImageBinInfo...bank: " + str(bank))
+    print("ImageBinInfo...image_name: " + str(image_name))
+    complete_url = url + '/imagebininfo'
+    data = {
+        "token": token,
+        "bank": bank,
+        "image_name": image_name
+    }
+    json_data = json.dumps(data)
+    (image_id, qvec, tvec,
+     camera_id, image_name,
+     xys, point3D_ids) = json.loads(requests.post(complete_url, data=json_data, auth=(username, password)).json())
+
+    print("Print out localization ground truth (q, t)")
+    print(qvec, tvec)
+    return None
         
 
 ## Actually setup the Api resource routing here
